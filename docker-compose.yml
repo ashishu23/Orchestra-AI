@@ -1,0 +1,82 @@
+version: "3.9"
+
+services:
+  qdrant:
+    image: qdrant/qdrant:v1.9.0
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - qdrant_data:/qdrant/storage
+    healthcheck:
+      test: ["CMD", "bash", "-c", "echo > /dev/tcp/localhost/6333"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+
+  knowledge-vault:
+    build:
+      context: ./knowledge-vault
+    ports:
+      - "8001:8001"
+    environment:
+      QDRANT_URL: http://qdrant:6333
+      EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-google}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-models/gemini-embedding-001}
+      DENSE_DIM: ${DENSE_DIM:-3072}
+      GOOGLE_API_KEY: ${GOOGLE_API_KEY:-}
+      CHUNK_SIZE: ${CHUNK_SIZE:-512}
+      CHUNK_OVERLAP: ${CHUNK_OVERLAP:-64}
+    depends_on:
+      qdrant:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8001/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  executive-sandbox:
+    build:
+      context: ./executive-sandbox
+    ports:
+      - "8002:8002"
+    # Simulate no-internet access: no external DNS, no default gateway
+    dns: []
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8002/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  orchestrator:
+    build:
+      context: ./orchestrator
+    ports:
+      - "8000:8000"
+    environment:
+      VAULT_URL: http://knowledge-vault:8001
+      SANDBOX_URL: http://executive-sandbox:8002
+      LLM_PROVIDER: ${LLM_PROVIDER:-google}
+      LLM_MODEL: ${LLM_MODEL:-gemini-2.0-flash}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      MAX_RETRIES: ${MAX_RETRIES:-3}
+      MCP_TIMEOUT: ${MCP_TIMEOUT:-30.0}
+    depends_on:
+      knowledge-vault:
+        condition: service_healthy
+      executive-sandbox:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+volumes:
+  qdrant_data:

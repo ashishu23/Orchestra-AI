@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ include "orchestra.namespace" . }}
+  labels:
+    kubernetes.io/metadata.name: {{ include "orchestra.namespace" . }}
+    {{ include "orchestra.labels" . | nindent 4 }}

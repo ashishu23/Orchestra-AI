@@ -1,0 +1,17 @@
+# CRITICAL SECURITY POLICY
+# The executive-sandbox pod must NEVER reach the internet.
+# This prevents data exfiltration and LLM API abuse from generated code.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: sandbox-deny-all-egress
+  namespace: {{ include "orchestra.namespace" . }}
+  labels:
+    {{ include "orchestra.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app: executive-sandbox
+  policyTypes:
+    - Egress
+  egress: []  # Empty list = deny all egress traffic

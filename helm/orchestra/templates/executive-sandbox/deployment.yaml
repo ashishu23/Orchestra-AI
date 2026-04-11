@@ -1,0 +1,53 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: executive-sandbox
+  namespace: {{ include "orchestra.namespace" . }}
+  labels:
+    app: executive-sandbox
+    {{ include "orchestra.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.executiveSandbox.replicas }}
+  selector:
+    matchLabels:
+      app: executive-sandbox
+  template:
+    metadata:
+      labels:
+        app: executive-sandbox
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+      containers:
+        - name: executive-sandbox
+          image: "{{ .Values.executiveSandbox.image }}:{{ .Values.executiveSandbox.tag }}"
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: {{ .Values.executiveSandbox.port }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            capabilities:
+              drop:
+                - ALL
+          resources:
+            requests:
+              memory: {{ .Values.executiveSandbox.resources.requests.memory }}
+              cpu: {{ .Values.executiveSandbox.resources.requests.cpu }}
+            limits:
+              memory: {{ .Values.executiveSandbox.resources.limits.memory }}
+              cpu: {{ .Values.executiveSandbox.resources.limits.cpu }}
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: {{ .Values.executiveSandbox.port }}
+            initialDelaySeconds: 10
+            periodSeconds: 20
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: {{ .Values.executiveSandbox.port }}
+            initialDelaySeconds: 5
+            periodSeconds: 10

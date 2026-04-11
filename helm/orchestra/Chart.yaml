@@ -1,0 +1,14 @@
+apiVersion: v2
+name: orchestra
+description: Orchestra AI — distributed multi-agent technical research system
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
+keywords:
+  - ai
+  - llm
+  - langgraph
+  - qdrant
+  - mcp
+maintainers:
+  - name: Orchestra AI Team

@@ -1,0 +1,66 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: orchestrator
+  namespace: {{ include "orchestra.namespace" . }}
+  labels:
+    app: orchestrator
+    {{ include "orchestra.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.orchestrator.replicas }}
+  selector:
+    matchLabels:
+      app: orchestrator
+  template:
+    metadata:
+      labels:
+        app: orchestrator
+    spec:
+      containers:
+        - name: orchestrator
+          image: "{{ .Values.orchestrator.image }}:{{ .Values.orchestrator.tag }}"
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: {{ .Values.orchestrator.port }}
+          env:
+            - name: VAULT_URL
+              value: "http://knowledge-vault.{{ include "orchestra.namespace" . }}.svc.cluster.local:{{ .Values.knowledgeVault.port }}"
+            - name: SANDBOX_URL
+              value: "http://executive-sandbox.{{ include "orchestra.namespace" . }}.svc.cluster.local:{{ .Values.executiveSandbox.port }}"
+            - name: LLM_PROVIDER
+              value: {{ .Values.orchestrator.env.llmProvider | quote }}
+            - name: LLM_MODEL
+              value: {{ .Values.orchestrator.env.llmModel | quote }}
+            - name: MAX_RETRIES
+              value: {{ .Values.orchestrator.env.maxRetries | quote }}
+            - name: MCP_TIMEOUT
+              value: {{ .Values.orchestrator.env.mcpTimeout | quote }}
+            - name: GEMINI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: orchestra-secrets
+                  key: GEMINI_API_KEY
+            - name: ANTHROPIC_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: orchestra-secrets
+                  key: ANTHROPIC_API_KEY
+          resources:
+            requests:
+              memory: {{ .Values.orchestrator.resources.requests.memory }}
+              cpu: {{ .Values.orchestrator.resources.requests.cpu }}
+            limits:
+              memory: {{ .Values.orchestrator.resources.limits.memory }}
+              cpu: {{ .Values.orchestrator.resources.limits.cpu }}
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: {{ .Values.orchestrator.port }}
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: {{ .Values.orchestrator.port }}
+            initialDelaySeconds: 10
+            periodSeconds: 10

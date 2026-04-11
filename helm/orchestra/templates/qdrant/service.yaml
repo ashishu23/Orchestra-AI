@@ -1,0 +1,20 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: qdrant
+  namespace: {{ include "orchestra.namespace" . }}
+  labels:
+    app: qdrant
+    {{ include "orchestra.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  clusterIP: None  # Headless service for StatefulSet DNS
+  selector:
+    app: qdrant
+  ports:
+    - port: {{ .Values.qdrant.port }}
+      targetPort: {{ .Values.qdrant.port }}
+      name: rest
+    - port: {{ .Values.qdrant.grpcPort }}
+      targetPort: {{ .Values.qdrant.grpcPort }}
+      name: grpc

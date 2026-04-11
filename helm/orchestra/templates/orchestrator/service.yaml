@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: orchestrator
+  namespace: {{ include "orchestra.namespace" . }}
+  labels:
+    app: orchestrator
+    {{ include "orchestra.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector:
+    app: orchestrator
+  ports:
+    - port: {{ .Values.orchestrator.port }}
+      targetPort: {{ .Values.orchestrator.port }}
+      protocol: TCP
+      name: http

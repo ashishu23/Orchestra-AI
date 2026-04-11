@@ -1,0 +1,18 @@
+# Allow all pods within the axiom-mesh namespace to communicate freely.
+# Cross-namespace traffic is implicitly denied.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: internal-allow
+  namespace: {{ include "orchestra.namespace" . }}
+  labels:
+    {{ include "orchestra.labels" . | nindent 4 }}
+spec:
+  podSelector: {}  # Applies to ALL pods in namespace
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ include "orchestra.namespace" . }}

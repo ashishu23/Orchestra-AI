@@ -1,0 +1,65 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: qdrant
+  namespace: {{ include "orchestra.namespace" . }}
+  labels:
+    app: qdrant
+    {{ include "orchestra.labels" . | nindent 4 }}
+spec:
+  serviceName: qdrant
+  replicas: 1
+  selector:
+    matchLabels:
+      app: qdrant
+  template:
+    metadata:
+      labels:
+        app: qdrant
+    spec:
+      containers:
+        - name: qdrant
+          image: "{{ .Values.qdrant.image }}:{{ .Values.qdrant.tag }}"
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: {{ .Values.qdrant.port }}
+              name: rest
+            - containerPort: {{ .Values.qdrant.grpcPort }}
+              name: grpc
+          volumeMounts:
+            - name: qdrant-storage
+              mountPath: /qdrant/storage
+          env:
+            - name: QDRANT__SERVICE__API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: orchestra-secrets
+                  key: QDRANT_API_KEY
+                  optional: true
+          resources:
+            requests:
+              memory: {{ .Values.qdrant.resources.requests.memory }}
+              cpu: {{ .Values.qdrant.resources.requests.cpu }}
+            limits:
+              memory: {{ .Values.qdrant.resources.limits.memory }}
+              cpu: {{ .Values.qdrant.resources.limits.cpu }}
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: {{ .Values.qdrant.port }}
+            initialDelaySeconds: 20
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: {{ .Values.qdrant.port }}
+            initialDelaySeconds: 10
+            periodSeconds: 10
+  volumeClaimTemplates:
+    - metadata:
+        name: qdrant-storage
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: {{ .Values.qdrant.storage }}

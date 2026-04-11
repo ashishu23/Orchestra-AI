@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: executive-sandbox
+  namespace: {{ include "orchestra.namespace" . }}
+  labels:
+    app: executive-sandbox
+    {{ include "orchestra.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector:
+    app: executive-sandbox
+  ports:
+    - port: {{ .Values.executiveSandbox.port }}
+      targetPort: {{ .Values.executiveSandbox.port }}
+      protocol: TCP
+      name: http

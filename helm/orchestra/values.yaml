@@ -1,0 +1,74 @@
+namespace: axiom-mesh
+
+secrets:
+  geminiApiKey: ""
+  anthropicApiKey: ""
+  qdrantApiKey: ""
+  googleApiKey: ""
+
+orchestrator:
+  image: orchestra-ai/orchestrator
+  tag: latest
+  replicas: 2
+  port: 8000
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "250m"
+    limits:
+      memory: "1Gi"
+      cpu: "1000m"
+  env:
+    llmProvider: google
+    llmModel: gemini-2.0-flash
+    maxRetries: "3"
+    mcpTimeout: "30.0"
+
+knowledgeVault:
+  image: orchestra-ai/knowledge-vault
+  tag: latest
+  replicas: 1
+  port: 8001
+  resources:
+    requests:
+      memory: "512Mi"
+      cpu: "250m"
+    limits:
+      memory: "2Gi"
+      cpu: "1000m"
+  env:
+    embeddingProvider: google
+    embeddingModel: "models/text-embedding-004"
+    chunkSize: "512"
+    chunkOverlap: "64"
+
+executiveSandbox:
+  image: orchestra-ai/executive-sandbox
+  tag: latest
+  replicas: 1
+  port: 8002
+  resources:
+    requests:
+      memory: "128Mi"
+      cpu: "250m"
+    limits:
+      memory: "512Mi"
+      cpu: "1000m"
+  hpa:
+    minReplicas: 1
+    maxReplicas: 5
+    cpuUtilization: 70
+
+qdrant:
+  image: qdrant/qdrant
+  tag: v1.9.0
+  port: 6333
+  grpcPort: 6334
+  storage: 10Gi
+  resources:
+    requests:
+      memory: "512Mi"
+      cpu: "250m"
+    limits:
+      memory: "2Gi"
+      cpu: "1000m"

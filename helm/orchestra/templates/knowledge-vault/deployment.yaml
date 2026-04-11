@@ -1,0 +1,64 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: knowledge-vault
+  namespace: {{ include "orchestra.namespace" . }}
+  labels:
+    app: knowledge-vault
+    {{ include "orchestra.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.knowledgeVault.replicas }}
+  selector:
+    matchLabels:
+      app: knowledge-vault
+  template:
+    metadata:
+      labels:
+        app: knowledge-vault
+    spec:
+      containers:
+        - name: knowledge-vault
+          image: "{{ .Values.knowledgeVault.image }}:{{ .Values.knowledgeVault.tag }}"
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: {{ .Values.knowledgeVault.port }}
+          env:
+            - name: QDRANT_URL
+              value: "http://qdrant.{{ include "orchestra.namespace" . }}.svc.cluster.local:{{ .Values.qdrant.port }}"
+            - name: EMBEDDING_PROVIDER
+              value: {{ .Values.knowledgeVault.env.embeddingProvider | quote }}
+            - name: EMBEDDING_MODEL
+              value: {{ .Values.knowledgeVault.env.embeddingModel | quote }}
+            - name: CHUNK_SIZE
+              value: {{ .Values.knowledgeVault.env.chunkSize | quote }}
+            - name: CHUNK_OVERLAP
+              value: {{ .Values.knowledgeVault.env.chunkOverlap | quote }}
+            - name: GOOGLE_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: orchestra-secrets
+                  key: GOOGLE_API_KEY
+            - name: QDRANT_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: orchestra-secrets
+                  key: QDRANT_API_KEY
+          resources:
+            requests:
+              memory: {{ .Values.knowledgeVault.resources.requests.memory }}
+              cpu: {{ .Values.knowledgeVault.resources.requests.cpu }}
+            limits:
+              memory: {{ .Values.knowledgeVault.resources.limits.memory }}
+              cpu: {{ .Values.knowledgeVault.resources.limits.cpu }}
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: {{ .Values.knowledgeVault.port }}
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: {{ .Values.knowledgeVault.port }}
+            initialDelaySeconds: 10
+            periodSeconds: 10
