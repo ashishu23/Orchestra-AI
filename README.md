@@ -20,6 +20,9 @@ A distributed multi-agent system for high-fidelity technical research. Orchestra
    - [Prerequisites](#prerequisites)
    - [Local Development (Docker Compose)](#local-development-docker-compose)
    - [Kubernetes Deployment (Minikube)](#kubernetes-deployment-minikube)
+   - [Cloud Deployment (AWS EKS)](#cloud-deployment-aws-eks)
+   - [Cloud Deployment (GCP GKE)](#cloud-deployment-gcp-gke)
+   - [Cloud Deployment (Azure AKS)](#cloud-deployment-azure-aks)
 8. [Ingesting Documents](#ingesting-documents)
 9. [API Reference](#api-reference)
 10. [Configuration](#configuration)
@@ -401,7 +404,10 @@ Orchestra AI/
 
 - Python 3.11+
 - Docker + Docker Compose
-- (For Kubernetes) Minikube or K3s, kubectl, Helm 3
+- (For local Kubernetes) Minikube or K3s, kubectl, Helm 3
+- (For AWS EKS) AWS CLI, `eksctl`
+- (For GCP GKE) `gcloud` CLI
+- (For Azure AKS) Azure CLI (`az`)
 
 ### Local Development (Docker Compose)
 
@@ -526,6 +532,286 @@ bash scripts/port_forward.sh
 ```bash
 kubectl get all -n axiom-mesh
 kubectl get networkpolicies -n axiom-mesh
+```
+
+---
+
+### Cloud Deployment (AWS EKS)
+
+**Prerequisites:** AWS CLI, `eksctl`, `kubectl`, Helm 3, Docker
+
+**1. Create an EKS cluster:**
+
+```bash
+eksctl create cluster \
+  --name orchestra-ai \
+  --region us-east-1 \
+  --nodegroup-name workers \
+  --node-type t3.medium \
+  --nodes 3 \
+  --nodes-min 2 \
+  --nodes-max 5 \
+  --managed
+```
+
+**2. Configure kubectl to use the new cluster:**
+
+```bash
+aws eks update-kubeconfig --name orchestra-ai --region us-east-1
+kubectl get nodes   # verify nodes are Ready
+```
+
+**3. Create an ECR repository for each service and push images:**
+
+```bash
+AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+REGION=us-east-1
+REGISTRY=$AWS_ACCOUNT_ID.dkr.ecr.$REGION.amazonaws.com
+
+# Authenticate Docker to ECR
+aws ecr get-login-password --region $REGION | docker login --username AWS --password-stdin $REGISTRY
+
+# Create repos
+for svc in orchestrator knowledge-vault executive-sandbox; do
+  aws ecr create-repository --repository-name orchestra-ai/$svc --region $REGION
+done
+
+# Build and push
+docker build -t $REGISTRY/orchestra-ai/orchestrator:latest ./orchestrator
+docker build -t $REGISTRY/orchestra-ai/knowledge-vault:latest ./knowledge-vault
+docker build -t $REGISTRY/orchestra-ai/executive-sandbox:latest ./executive-sandbox
+
+docker push $REGISTRY/orchestra-ai/orchestrator:latest
+docker push $REGISTRY/orchestra-ai/knowledge-vault:latest
+docker push $REGISTRY/orchestra-ai/executive-sandbox:latest
+```
+
+**4. Deploy with Helm using production values:**
+
+```bash
+helm upgrade --install orchestra ./helm/orchestra \
+  --namespace axiom-mesh \
+  --create-namespace \
+  --values helm/orchestra/values.yaml \
+  --set orchestrator.image=$REGISTRY/orchestra-ai/orchestrator \
+  --set knowledgeVault.image=$REGISTRY/orchestra-ai/knowledge-vault \
+  --set executiveSandbox.image=$REGISTRY/orchestra-ai/executive-sandbox \
+  --set secrets.geminiApiKey=$GEMINI_API_KEY \
+  --set secrets.googleApiKey=$GOOGLE_API_KEY \
+  --set secrets.anthropicApiKey=$ANTHROPIC_API_KEY
+```
+
+**5. Expose the orchestrator via a LoadBalancer:**
+
+```bash
+kubectl patch svc orchestrator -n axiom-mesh \
+  -p '{"spec": {"type": "LoadBalancer"}}'
+
+# Get the external hostname (may take 1-2 minutes)
+kubectl get svc orchestrator -n axiom-mesh
+```
+
+**6. Verify deployment:**
+
+```bash
+kubectl get all -n axiom-mesh
+kubectl get networkpolicies -n axiom-mesh
+```
+
+**7. Tear down when done:**
+
+```bash
+helm uninstall orchestra -n axiom-mesh
+eksctl delete cluster --name orchestra-ai --region us-east-1
+```
+
+---
+
+### Cloud Deployment (GCP GKE)
+
+**Prerequisites:** `gcloud` CLI, `kubectl`, Helm 3, Docker
+
+**1. Set project and create a GKE cluster:**
+
+```bash
+PROJECT_ID=your-gcp-project-id
+REGION=us-central1
+
+gcloud config set project $PROJECT_ID
+
+gcloud container clusters create orchestra-ai \
+  --region $REGION \
+  --num-nodes 3 \
+  --machine-type e2-standard-2 \
+  --enable-autoscaling \
+  --min-nodes 2 \
+  --max-nodes 5
+```
+
+**2. Configure kubectl:**
+
+```bash
+gcloud container clusters get-credentials orchestra-ai --region $REGION
+kubectl get nodes   # verify nodes are Ready
+```
+
+**3. Push images to Google Artifact Registry:**
+
+```bash
+REGISTRY=$REGION-docker.pkg.dev/$PROJECT_ID/orchestra-ai
+
+# Create Artifact Registry repo
+gcloud artifacts repositories create orchestra-ai \
+  --repository-format=docker \
+  --location=$REGION
+
+# Authenticate Docker
+gcloud auth configure-docker $REGION-docker.pkg.dev
+
+# Build and push
+docker build -t $REGISTRY/orchestrator:latest ./orchestrator
+docker build -t $REGISTRY/knowledge-vault:latest ./knowledge-vault
+docker build -t $REGISTRY/executive-sandbox:latest ./executive-sandbox
+
+docker push $REGISTRY/orchestrator:latest
+docker push $REGISTRY/knowledge-vault:latest
+docker push $REGISTRY/executive-sandbox:latest
+```
+
+**4. Deploy with Helm:**
+
+```bash
+helm upgrade --install orchestra ./helm/orchestra \
+  --namespace axiom-mesh \
+  --create-namespace \
+  --values helm/orchestra/values.yaml \
+  --set orchestrator.image=$REGISTRY/orchestrator \
+  --set knowledgeVault.image=$REGISTRY/knowledge-vault \
+  --set executiveSandbox.image=$REGISTRY/executive-sandbox \
+  --set secrets.geminiApiKey=$GEMINI_API_KEY \
+  --set secrets.googleApiKey=$GOOGLE_API_KEY \
+  --set secrets.anthropicApiKey=$ANTHROPIC_API_KEY
+```
+
+**5. Expose the orchestrator:**
+
+```bash
+kubectl patch svc orchestrator -n axiom-mesh \
+  -p '{"spec": {"type": "LoadBalancer"}}'
+
+kubectl get svc orchestrator -n axiom-mesh   # note EXTERNAL-IP
+```
+
+**6. Verify deployment:**
+
+```bash
+kubectl get all -n axiom-mesh
+kubectl get networkpolicies -n axiom-mesh
+```
+
+**7. Tear down when done:**
+
+```bash
+helm uninstall orchestra -n axiom-mesh
+gcloud container clusters delete orchestra-ai --region $REGION
+```
+
+---
+
+### Cloud Deployment (Azure AKS)
+
+**Prerequisites:** Azure CLI (`az`), `kubectl`, Helm 3, Docker
+
+**1. Create a resource group and AKS cluster:**
+
+```bash
+RESOURCE_GROUP=orchestra-ai-rg
+CLUSTER_NAME=orchestra-ai
+LOCATION=eastus
+
+az group create --name $RESOURCE_GROUP --location $LOCATION
+
+az aks create \
+  --resource-group $RESOURCE_GROUP \
+  --name $CLUSTER_NAME \
+  --node-count 3 \
+  --node-vm-size Standard_B2s \
+  --enable-cluster-autoscaler \
+  --min-count 2 \
+  --max-count 5 \
+  --generate-ssh-keys
+```
+
+**2. Configure kubectl:**
+
+```bash
+az aks get-credentials --resource-group $RESOURCE_GROUP --name $CLUSTER_NAME
+kubectl get nodes   # verify nodes are Ready
+```
+
+**3. Push images to Azure Container Registry (ACR):**
+
+```bash
+ACR_NAME=orchestraairegistry   # must be globally unique
+
+az acr create --resource-group $RESOURCE_GROUP \
+  --name $ACR_NAME --sku Basic
+
+# Attach ACR to AKS (grants pull permissions automatically)
+az aks update --resource-group $RESOURCE_GROUP \
+  --name $CLUSTER_NAME --attach-acr $ACR_NAME
+
+REGISTRY=$ACR_NAME.azurecr.io
+
+# Authenticate Docker
+az acr login --name $ACR_NAME
+
+# Build and push
+docker build -t $REGISTRY/orchestra-ai/orchestrator:latest ./orchestrator
+docker build -t $REGISTRY/orchestra-ai/knowledge-vault:latest ./knowledge-vault
+docker build -t $REGISTRY/orchestra-ai/executive-sandbox:latest ./executive-sandbox
+
+docker push $REGISTRY/orchestra-ai/orchestrator:latest
+docker push $REGISTRY/orchestra-ai/knowledge-vault:latest
+docker push $REGISTRY/orchestra-ai/executive-sandbox:latest
+```
+
+**4. Deploy with Helm:**
+
+```bash
+helm upgrade --install orchestra ./helm/orchestra \
+  --namespace axiom-mesh \
+  --create-namespace \
+  --values helm/orchestra/values.yaml \
+  --set orchestrator.image=$REGISTRY/orchestra-ai/orchestrator \
+  --set knowledgeVault.image=$REGISTRY/orchestra-ai/knowledge-vault \
+  --set executiveSandbox.image=$REGISTRY/orchestra-ai/executive-sandbox \
+  --set secrets.geminiApiKey=$GEMINI_API_KEY \
+  --set secrets.googleApiKey=$GOOGLE_API_KEY \
+  --set secrets.anthropicApiKey=$ANTHROPIC_API_KEY
+```
+
+**5. Expose the orchestrator:**
+
+```bash
+kubectl patch svc orchestrator -n axiom-mesh \
+  -p '{"spec": {"type": "LoadBalancer"}}'
+
+kubectl get svc orchestrator -n axiom-mesh   # note EXTERNAL-IP
+```
+
+**6. Verify deployment:**
+
+```bash
+kubectl get all -n axiom-mesh
+kubectl get networkpolicies -n axiom-mesh
+```
+
+**7. Tear down when done:**
+
+```bash
+helm uninstall orchestra -n axiom-mesh
+az group delete --name $RESOURCE_GROUP --yes --no-wait
 ```
 
 ---
