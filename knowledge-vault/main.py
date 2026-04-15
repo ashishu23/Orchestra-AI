@@ -35,6 +35,7 @@ async def lifespan(app: FastAPI):
         provider=settings.embedding_provider,
         model=settings.embedding_model,
         api_key=settings.google_api_key or None,
+        output_dimensionality=settings.dense_dim if settings.embedding_provider == "google" else None,
     )
     store = QdrantStore(
         url=settings.qdrant_url,

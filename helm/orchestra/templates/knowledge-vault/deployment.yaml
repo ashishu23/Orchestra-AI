@@ -43,6 +43,7 @@ spec:
                 secretKeyRef:
                   name: orchestra-secrets
                   key: QDRANT_API_KEY
+                  optional: true
           resources:
             requests:
               memory: {{ .Values.knowledgeVault.resources.requests.memory }}

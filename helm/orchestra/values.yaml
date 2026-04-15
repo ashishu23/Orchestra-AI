@@ -38,7 +38,7 @@ knowledgeVault:
       cpu: "1000m"
   env:
     embeddingProvider: google
-    embeddingModel: "models/text-embedding-004"
+    embeddingModel: "models/gemini-embedding-001"
     chunkSize: "512"
     chunkOverlap: "64"
 

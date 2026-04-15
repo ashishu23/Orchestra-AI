@@ -6,7 +6,7 @@ class Settings(BaseSettings):
     qdrant_api_key: str = ""
 
     embedding_provider: str = "google"    # "google" | "sentence-transformers"
-    embedding_model: str = "models/text-embedding-004"
+    embedding_model: str = "models/gemini-embedding-001"
     google_api_key: str = ""
 
     chunk_size: int = 512

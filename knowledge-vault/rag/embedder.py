@@ -6,7 +6,7 @@ import httpx
 
 class Embedder:
     """
-    Async text embedder supporting Google text-embedding-004 and
+    Async text embedder supporting Google gemini-embedding-001 and
     sentence-transformers as a local fallback.
     """
 
@@ -15,10 +15,12 @@ class Embedder:
         provider: Literal["google", "sentence-transformers"],
         model: str,
         api_key: str | None = None,
+        output_dimensionality: int | None = None,
     ):
         self.provider = provider
         self._model_name = model
         self._api_key = api_key or ""
+        self._output_dimensionality = output_dimensionality
 
         if provider == "sentence-transformers":
             from sentence_transformers import SentenceTransformer
@@ -46,14 +48,18 @@ class Embedder:
             f"/v1beta/models/{model_id}:embedContent"
         )
 
+        body: dict = {
+            "content": {"parts": [{"text": ""}]},
+            "taskType": "RETRIEVAL_DOCUMENT",
+        }
+        if self._output_dimensionality is not None:
+            body["outputDimensionality"] = self._output_dimensionality
+
         async def _one(client: httpx.AsyncClient, text: str) -> list[float]:
             try:
                 resp = await client.post(
                     url,
-                    json={
-                        "content": {"parts": [{"text": text}]},
-                        "taskType": "RETRIEVAL_DOCUMENT",
-                    },
+                    json={**body, "content": {"parts": [{"text": text}]}},
                     params={"key": self._api_key},
                 )
                 resp.raise_for_status()
